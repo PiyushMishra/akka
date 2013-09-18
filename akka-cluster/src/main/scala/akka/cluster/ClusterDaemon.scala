@@ -704,7 +704,7 @@ private[cluster] class ClusterCoreDaemon(publisher: ActorRef) extends Actor with
       -1.0 // all in seen, no bias
     else {
       import math.min
-      val targetCount = 5.0
+      val targetCount = 10.0
       min(GossipDifferentViewProbability, targetCount * stragglerCount / upToDateCount)
     }
   }
