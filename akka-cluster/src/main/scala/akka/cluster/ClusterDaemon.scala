@@ -703,9 +703,9 @@ private[cluster] class ClusterCoreDaemon(publisher: ActorRef) extends Actor with
     if (stragglerCount == 0)
       -1.0 // all in seen, no bias
     else {
-      import math.max
-      val smallClusterBias = 5
-      GossipDifferentViewProbability / max((upToDateCount.toDouble / stragglerCount) - smallClusterBias, 1.0)
+      import math.min
+      val targetCount = 5.0
+      min(GossipDifferentViewProbability, targetCount * stragglerCount / upToDateCount)
     }
   }
 
