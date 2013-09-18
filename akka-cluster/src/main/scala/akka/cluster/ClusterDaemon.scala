@@ -111,6 +111,8 @@ private[cluster] object InternalClusterAction {
 
   case object GossipTick extends Tick
 
+  case object GossipSpeedupTick extends Tick
+
   case object HeartbeatTick extends Tick
 
   case object ReapUnreachableTick extends Tick
@@ -317,7 +319,8 @@ private[cluster] class ClusterCoreDaemon(publisher: ActorRef) extends Actor with
   def initialized: Actor.Receive = {
     case msg: GossipEnvelope              ⇒ receiveGossip(msg)
     case msg: GossipStatus                ⇒ receiveGossipStatus(msg)
-    case GossipTick                       ⇒ gossip()
+    case GossipTick                       ⇒ gossipTick()
+    case GossipSpeedupTick                ⇒ gossipSpeedupTick()
     case ReapUnreachableTick              ⇒ reapUnreachableMembers()
     case LeaderActionsTick                ⇒ leaderActions()
     case PublishStatsTick                 ⇒ publishInternalStats()
@@ -653,7 +656,19 @@ private[cluster] class ClusterCoreDaemon(publisher: ActorRef) extends Actor with
     }
   }
 
-  def mergeRate(count: Long): Double = (count * 1000.0) / GossipInterval.toMillis
+  def gossipTick(): Unit = {
+    gossip()
+    if (isGossipSpeedupNeeded) {
+      scheduler.scheduleOnce(GossipInterval / 3, self, GossipSpeedupTick)
+      scheduler.scheduleOnce(GossipInterval * 2 / 3, self, GossipSpeedupTick)
+    }
+  }
+
+  def gossipSpeedupTick(): Unit =
+    if (isGossipSpeedupNeeded) gossip()
+
+  def isGossipSpeedupNeeded: Boolean =
+    (latestGossip.overview.seenSize < latestGossip.membersSize / 2)
 
   /**
    * Initiates a new round of gossip.
@@ -665,7 +680,7 @@ private[cluster] class ClusterCoreDaemon(publisher: ActorRef) extends Actor with
       val localGossip = latestGossip
 
       val preferredGossipTargets: Vector[UniqueAddress] =
-        if (ThreadLocalRandom.current.nextDouble() < adjustedGossipDifferentViewProbability) {
+        if (ThreadLocalRandom.current.nextDouble() < GossipDifferentViewProbability) {
           // If it's time to try to gossip to some nodes with a different view
           // gossip to a random alive member with preference to a member with older gossip version
           localGossip.members.collect {
